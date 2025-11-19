@@ -122,7 +122,11 @@ class GoogleMapsScraper:
         wait = WebDriverWait(self.driver, 15)  # Increased timeout for Cloud
         if progress_callback:
             progress_callback("Waiting for page to load...")
-        time.sleep(5)  # Wait for the page to load
+        # Use explicit wait instead of fixed sleep
+        try:
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'a.hfpxzc')))
+        except TimeoutException:
+            pass  # Continue even if elements not found immediately
 
         # Check if the business name matches the query in the h1 tag
         try:
@@ -191,7 +195,13 @@ class GoogleMapsScraper:
                     
                     print(f"Clicking on {business_name}")
                     business.click()
-                    time.sleep(5)  # Wait for the pane to load
+                    # Use explicit wait instead of fixed sleep - wait for business details pane to load
+                    try:
+                        wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'AeaXub')]//div[contains(@class, 'Io6YTe')]")))
+                    except TimeoutException:
+                        # If pane doesn't load, skip this business
+                        print(f"Pane did not load for {business_name}, skipping...")
+                        continue
 
                     # Scrape address
                     address = self._get_address()
@@ -211,10 +221,14 @@ class GoogleMapsScraper:
 
                     # Go back to the list
                     self.driver.execute_script("window.history.go(-1)")
-                    time.sleep(5)  # Wait for the page to reload
-
-                    # Re-locate businesses after coming back
-                    businesses = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'a.hfpxzc')))
+                    # Use explicit wait instead of fixed sleep - wait for list to reload
+                    try:
+                        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'a.hfpxzc')))
+                        # Re-locate businesses after coming back
+                        businesses = self.driver.find_elements(By.CSS_SELECTOR, 'a.hfpxzc')
+                    except TimeoutException:
+                        print("List did not reload, breaking...")
+                        break
 
                 except StaleElementReferenceException:
                     print(f"Stale element reference error encountered. Retrying...")
@@ -226,7 +240,8 @@ class GoogleMapsScraper:
 
             # Scroll down to load more results
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(5)  # Wait for more results to load
+            # Reduced wait time - new results usually load quickly
+            time.sleep(2)  # Reduced from 5 to 2 seconds
 
         if progress_callback:
             progress_callback(f"Scraping completed! Found {len(results)} results.")
