@@ -199,11 +199,15 @@ class GoogleMapsScraper:
                     # Scrape phone number
                     phone = self._get_phone_number()
 
-                    # Scrape website
-                    website = self._get_element_attribute("//a[@aria-label and contains(@aria-label, 'Website')]", 'href')
+                    # Only add to results if phone number is found (not 'N/A' or empty)
+                    if phone and phone != 'N/A' and phone.strip():
+                        # Scrape website
+                        website = self._get_element_attribute("//a[@aria-label and contains(@aria-label, 'Website')]", 'href')
 
-                    results.append({'Name': business_name, 'Address': address, 'Phone': phone, 'Website': website})
-                    print(f"Scraped: {business_name}, {address}, {phone}, {website}")
+                        results.append({'Name': business_name, 'Address': address, 'Phone': phone, 'Website': website})
+                        print(f"Scraped: {business_name}, {address}, {phone}, {website}")
+                    else:
+                        print(f"Skipped {business_name}: No mobile phone number found")
 
                     # Go back to the list
                     self.driver.execute_script("window.history.go(-1)")
@@ -237,12 +241,19 @@ class GoogleMapsScraper:
             business_name = self._get_element_text("//h1[@class='DUwDvf lfPIob']")
             address = self._get_address()
             phone = self._get_phone_number()
-            website = self._get_element_attribute("//a[@aria-label and contains(@aria-label, 'Website')]", 'href')
+            
+            # Only return result if phone number is found (not 'N/A' or empty)
+            if phone and phone != 'N/A' and phone.strip():
+                website = self._get_element_attribute("//a[@aria-label and contains(@aria-label, 'Website')]", 'href')
 
-            # Store the result in CSV format
-            result = [{'Name': business_name, 'Address': address, 'Phone': phone, 'Website': website}]
-            print(f"Scraped data: Name: {business_name} | address: {address} | phone: {phone} | website: {website}")
-            return self._create_csv_string(result)  
+                # Store the result in CSV format
+                result = [{'Name': business_name, 'Address': address, 'Phone': phone, 'Website': website}]
+                print(f"Scraped data: Name: {business_name} | address: {address} | phone: {phone} | website: {website}")
+                return self._create_csv_string(result)
+            else:
+                print(f"Skipped {business_name}: No mobile phone number found")
+                # Return empty CSV
+                return self._create_csv_string([])  
 
         except Exception as e:
             print(f"Error scraping business page: {e}")
