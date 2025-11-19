@@ -56,12 +56,35 @@ class GoogleMapsScraper:
                     options.binary_location = path
                     break
         
+        # Try ChromeDriverManager first
         try:
-            service = Service(ChromeDriverManager().install())
+            driver_path = ChromeDriverManager().install()
+            # Make sure driver is executable on Linux
+            if system == 'Linux' and os.path.exists(driver_path):
+                os.chmod(driver_path, 0o755)
+            service = Service(driver_path)
             driver = webdriver.Chrome(service=service, options=options)
             return driver
         except Exception as e:
-            error_msg = f"Failed to initialize Chrome driver: {e}"
+            print(f"ChromeDriverManager failed: {e}")
+            # Try system chromedriver if available
+            if system == 'Linux':
+                system_chromedriver_paths = [
+                    '/usr/bin/chromedriver',
+                    '/usr/lib/chromium-browser/chromedriver',
+                ]
+                for chromedriver_path in system_chromedriver_paths:
+                    if os.path.exists(chromedriver_path):
+                        try:
+                            os.chmod(chromedriver_path, 0o755)
+                            service = Service(chromedriver_path)
+                            driver = webdriver.Chrome(service=service, options=options)
+                            return driver
+                        except Exception as e2:
+                            print(f"System chromedriver at {chromedriver_path} failed: {e2}")
+                            continue
+            
+            error_msg = f"Failed to initialize Chrome driver. ChromeDriverManager error: {e}"
             print(error_msg)
             raise Exception(error_msg)
 
