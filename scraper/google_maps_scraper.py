@@ -108,10 +108,20 @@ class GoogleMapsScraper:
                     print(error_msg)
                     raise Exception(error_msg)
 
-    def scrape(self, query, max_results=100, max_pages=5):
-        self.driver.get(f"https://www.google.com/maps/search/{query}")
+    def scrape(self, query, max_results=100, max_pages=5, progress_callback=None):
+        if progress_callback:
+            progress_callback("Loading Google Maps...")
+        
+        try:
+            self.driver.get(f"https://www.google.com/maps/search/{query}")
+        except Exception as e:
+            if progress_callback:
+                progress_callback(f"Error loading page: {str(e)}")
+            raise
 
-        wait = WebDriverWait(self.driver, 10)
+        wait = WebDriverWait(self.driver, 15)  # Increased timeout for Cloud
+        if progress_callback:
+            progress_callback("Waiting for page to load...")
         time.sleep(5)  # Wait for the page to load
 
         # Check if the business name matches the query in the h1 tag
@@ -133,17 +143,30 @@ class GoogleMapsScraper:
             if len(results) >= max_results:
                 break
 
-            print(f"Scraping page {i+1}...")
+            page_msg = f"Scraping page {i+1}/{max_pages}... (Found {len(results)} results so far)"
+            print(page_msg)
+            if progress_callback:
+                progress_callback(page_msg)
+            
             try:
                 businesses = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'a.hfpxzc')))
                 print(f"Found {len(businesses)} businesses on this page.")
+                if progress_callback:
+                    progress_callback(f"Page {i+1}: Found {len(businesses)} businesses")
             except TimeoutException:
                 print("Timeout: No businesses found.")
+                if progress_callback:
+                    progress_callback(f"Timeout: No businesses found on page {i+1}")
                 break
 
-            for business in businesses:
+            for idx, business in enumerate(businesses):
+                if len(results) >= max_results:
+                    break
+                    
                 try:
                     business_name = business.get_attribute('aria-label')
+                    if not business_name:
+                        continue
 
                     # Skip sponsored businesses
                     try:
@@ -159,6 +182,11 @@ class GoogleMapsScraper:
                         print(f"Skipping business: {business_name}")
                         continue
 
+                    current_msg = f"Processing: {business_name} ({len(results)+1}/{max_results})"
+                    print(current_msg)
+                    if progress_callback:
+                        progress_callback(current_msg)
+                    
                     print(f"Clicking on {business_name}")
                     business.click()
                     time.sleep(5)  # Wait for the pane to load
@@ -194,6 +222,9 @@ class GoogleMapsScraper:
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(5)  # Wait for more results to load
 
+        if progress_callback:
+            progress_callback(f"Scraping completed! Found {len(results)} results.")
+        
         self.driver.quit()
         return self._create_csv_string(results)
 
