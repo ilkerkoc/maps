@@ -131,9 +131,11 @@ class GoogleMapsScraper:
 
             if query.lower() in business_name_in_h1.lower():
                 print(f"Direct business match found: {business_name_in_h1}")
-                self._scrape_single_business_page()
+                if progress_callback:
+                    progress_callback("Scraping single business page...")
+                csv_string = self._scrape_single_business_page()
                 self.driver.quit()
-                return
+                return csv_string
 
         except TimeoutException:
             print("No h1 tag found or business name does not match the query.")
@@ -278,7 +280,7 @@ class GoogleMapsScraper:
         return self._get_element_text("//div[contains(@class, 'AeaXub')]//div[contains(@class, 'Io6YTe')]")
 
     def _get_phone_number(self):
-        """Extract phone number from Google Maps business page."""
+        """Extract mobile phone number from Google Maps business page."""
         # First, try specific phone number selectors (buttons/links with Phone aria-label)
         phone_selectors = [
             "//button[contains(@aria-label, 'Phone')]",
@@ -295,29 +297,29 @@ class GoogleMapsScraper:
                 href = element.get_attribute('href')
                 if href and 'tel:' in href:
                     phone = href.replace('tel:', '').strip()
-                    if self._is_valid_phone(phone):
+                    if self._is_mobile_phone(phone):
                         return phone
                 
                 # Try to get text
                 phone_text = element.text.strip()
-                if phone_text and self._is_valid_phone(phone_text):
+                if phone_text and self._is_mobile_phone(phone_text):
                     return phone_text
                 
                 # Try data-value attribute
                 data_value = element.get_attribute('data-value')
-                if data_value and self._is_valid_phone(data_value):
+                if data_value and self._is_mobile_phone(data_value):
                     return data_value.strip()
             except NoSuchElementException:
                 continue
         
         # If specific selectors fail, try to find phone in Io6YTe elements
-        # but filter out addresses by checking if it looks like a phone number
+        # but filter out addresses by checking if it looks like a mobile phone number
         try:
             all_elements = self.driver.find_elements(By.XPATH, "//div[contains(@class, 'Io6YTe')]")
             for element in all_elements:
                 text = element.text.strip()
-                # Check if it's a phone number (contains digits and phone-like characters, but not address-like)
-                if self._is_valid_phone(text) and not self._looks_like_address(text):
+                # Check if it's a mobile phone number (contains digits and phone-like characters, but not address-like)
+                if self._is_mobile_phone(text) and not self._looks_like_address(text):
                     return text
         except NoSuchElementException:
             pass
@@ -344,6 +346,47 @@ class GoogleMapsScraper:
         
         # Should have digits and phone-like formatting
         return has_digits and (has_plus or has_parentheses or (digit_count >= 7 and digit_count <= 15))
+    
+    def _is_mobile_phone(self, text):
+        """Check if text is a mobile phone number (Turkey format: 05XX or +90 5XX)."""
+        if not text:
+            return False
+        
+        # Remove common formatting characters
+        cleaned = re.sub(r'[\s\-\(\)]', '', text)
+        
+        # Remove +90 or 0090 prefix if present
+        if cleaned.startswith('+90'):
+            cleaned = cleaned[3:]
+        elif cleaned.startswith('0090'):
+            cleaned = cleaned[4:]
+        elif cleaned.startswith('90') and len(cleaned) > 10:
+            cleaned = cleaned[2:]
+        
+        # Check if it starts with 05 (Turkey mobile prefix)
+        if cleaned.startswith('05'):
+            # Should be 10 digits (05XX XXX XX XX)
+            digits_only = re.sub(r'[^\d]', '', cleaned)
+            if len(digits_only) == 10 and digits_only.startswith('05'):
+                # Check if second digit is 0-9 (05X)
+                if len(digits_only) >= 3 and digits_only[2] in '0123456789':
+                    return True
+        
+        # Also check international format +90 5XX
+        if text.startswith('+90') or text.startswith('0090'):
+            # Extract the part after country code
+            after_country = cleaned
+            if '+' in text:
+                parts = text.split('+90')
+                if len(parts) > 1:
+                    after_country = re.sub(r'[\s\-\(\)]', '', parts[1])
+            
+            # Check if it starts with 5 and has 10 digits total
+            digits_only = re.sub(r'[^\d]', '', after_country)
+            if len(digits_only) == 10 and digits_only.startswith('5'):
+                return True
+        
+        return False
     
     def _looks_like_address(self, text):
         """Check if text looks like an address rather than a phone number."""
