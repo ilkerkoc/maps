@@ -56,37 +56,57 @@ class GoogleMapsScraper:
                     options.binary_location = path
                     break
         
-        # Try ChromeDriverManager first
+        # Try ChromeDriverManager with cache bypass to get latest version
         try:
-            driver_path = ChromeDriverManager().install()
-            # Make sure driver is executable on Linux
+            # Force ChromeDriverManager to download latest version by setting cache_valid_range to 0
+            from webdriver_manager.core.os_manager import ChromeType
+            driver_path = ChromeDriverManager(
+                chrome_type=ChromeType.CHROMIUM,
+                cache_valid_range=0  # Force download latest version
+            ).install()
             if system == 'Linux' and os.path.exists(driver_path):
                 os.chmod(driver_path, 0o755)
             service = Service(driver_path)
             driver = webdriver.Chrome(service=service, options=options)
             return driver
         except Exception as e:
-            print(f"ChromeDriverManager failed: {e}")
-            # Try system chromedriver if available
-            if system == 'Linux':
-                system_chromedriver_paths = [
-                    '/usr/bin/chromedriver',
-                    '/usr/lib/chromium-browser/chromedriver',
-                ]
-                for chromedriver_path in system_chromedriver_paths:
-                    if os.path.exists(chromedriver_path):
-                        try:
-                            os.chmod(chromedriver_path, 0o755)
-                            service = Service(chromedriver_path)
-                            driver = webdriver.Chrome(service=service, options=options)
-                            return driver
-                        except Exception as e2:
-                            print(f"System chromedriver at {chromedriver_path} failed: {e2}")
-                            continue
-            
-            error_msg = f"Failed to initialize Chrome driver. ChromeDriverManager error: {e}"
-            print(error_msg)
-            raise Exception(error_msg)
+            print(f"ChromeDriverManager with Chromium type and cache bypass failed: {e}")
+            # Try regular ChromeDriverManager with cache bypass
+            try:
+                driver_path = ChromeDriverManager(cache_valid_range=0).install()
+                if system == 'Linux' and os.path.exists(driver_path):
+                    os.chmod(driver_path, 0o755)
+                service = Service(driver_path)
+                driver = webdriver.Chrome(service=service, options=options)
+                return driver
+            except Exception as e2:
+                print(f"ChromeDriverManager with cache bypass failed: {e2}")
+                # Try Selenium's automatic driver management
+                try:
+                    driver = webdriver.Chrome(options=options)
+                    return driver
+                except Exception as e3:
+                    print(f"Selenium automatic driver management failed: {e3}")
+                    # Try system chromedriver if available
+                    if system == 'Linux':
+                        system_chromedriver_paths = [
+                            '/usr/bin/chromedriver',
+                            '/usr/lib/chromium-browser/chromedriver',
+                        ]
+                        for chromedriver_path in system_chromedriver_paths:
+                            if os.path.exists(chromedriver_path):
+                                try:
+                                    os.chmod(chromedriver_path, 0o755)
+                                    service = Service(chromedriver_path)
+                                    driver = webdriver.Chrome(service=service, options=options)
+                                    return driver
+                                except Exception as e4:
+                                    print(f"System chromedriver at {chromedriver_path} failed: {e4}")
+                                    continue
+                    
+                    error_msg = f"Failed to initialize Chrome driver. All methods failed. Errors: {e}, {e2}, {e3}"
+                    print(error_msg)
+                    raise Exception(error_msg)
 
     def scrape(self, query, max_results=100, max_pages=5):
         self.driver.get(f"https://www.google.com/maps/search/{query}")
